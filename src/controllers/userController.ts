@@ -6,6 +6,24 @@ import CategoryOrder from "../models/CategoryOrder"
 import { ObjectId } from "mongodb"
 import UserHistory from "../models/UserHistory"
 import QuestionsByCategory from "../models/QuestionsByCategory"
+
+// Azure Imports
+import { BlobServiceClient } from "@azure/storage-blob"
+import { DefaultAzureCredential } from "@azure/identity"
+const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+const credential = new DefaultAzureCredential();
+if (!accountName) {
+    console.log("Please set the AZURE_STORAGE_ACCOUNT_NAME environment variable.");
+}
+const blobServiceClient = new BlobServiceClient(
+    `https://${accountName}.blob.core.windows.net`,
+    credential
+);
+// This will be used when using the connection string method.
+// const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+// const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+
+
 const loginUser = async (req: Request, res: Response) => {
     try {
         const { name, smash_user_id, bot_preference } = req.body
@@ -98,4 +116,43 @@ const loginUser = async (req: Request, res: Response) => {
     }
 }
 
-export default { loginUser }
+const saveAnswerRecordings = async (req: any, res: Response) => {
+    try {
+        const { question_id, interview_key } = req.body
+        if (!question_id || !interview_key) {
+            return res.json({ success: false, message: "Question ID or Interview Key Missing" })
+        }
+        const recording = req?.files?.recording
+        if (!recording || !recording.mimetype) {
+            return res.json({ success: false, message: "Recording Missing" })
+        }
+        const containerClient = blobServiceClient.getContainerClient("qa-smash-container");
+
+        if (!await containerClient.exists()) {
+            const createContainerResponse = await containerClient.create();
+            console.log(`Container was created successfully.\n\trequestId:${createContainerResponse.requestId}\n\tURL: ${containerClient.url}`);
+        }
+
+        const blobType = recording.mimetype.split('/')[1]
+        const blobName = `${interview_key}/${question_id}.${blobType}`
+        const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+        console.log(`\nUploading to Azure storage as blob\n\tname: ${blobName}:\n\tURL: ${blockBlobClient.url}`);
+        const uploadBlobResponse = await blockBlobClient.upload(recording.data, recording.data.length, {
+            metadata: { question_id, interview_key }
+        });
+        if (uploadBlobResponse.errorCode) {
+            console.log(uploadBlobResponse.errorCode)
+            return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
+        }
+        console.log(`Blob was uploaded successfully. requestId: ${uploadBlobResponse.requestId}`);
+
+        return res.json({ success: true, message: "Recording saved successfully", url: blockBlobClient.url })
+
+    } catch (e: any) {
+        console.log(e.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred" })
+    }
+}
+
+
+export default { loginUser, saveAnswerRecordings }
