@@ -77,7 +77,28 @@ const loginUser = async (req: Request, res: Response) => {
             const totalAttempts: any = userHistory?.login_timestamps.length
             if (totalAttempts % 3 === 0) {
                 // TODO
-                return res.status(200).json({ success: true, message: "Login Successful", data: "TODO" })
+                let firstCategorySkipped: any = null
+                for (let i = 0; i < (userHistory?.all_categories_accessed.length ?? 0); i++) {
+                    if (userHistory?.all_categories_accessed[i].is_skipped) {
+                        firstCategorySkipped = userHistory?.all_categories_accessed[i]
+                        break;
+                    }
+                }
+                if (!firstCategorySkipped) {
+                    return res.status(200).json({ success: false, message: "No Category Skipped" });
+                }
+                const userAnswers = await UserAnswers.findOne({ user_id: new ObjectId(user._id), category_id: firstCategorySkipped.category_id })
+                const skipped_questions = userAnswers?.skip_questions_ids || []
+                const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategorySkipped.category_id) })
+                const questions = questionsByCategory?.questions || []
+                let question_data = []
+                for (let i = 0; i < (questions?.length); i++) {
+                    if (skipped_questions.includes(questions[i].question_id)) {
+                        question_data.push(questions[i])
+                    }
+                }
+                const data = { ...questionsByCategory?.toJSON(), questions: question_data }
+                return res.status(200).json({ success: true, message: "Login Successful", data: data });
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed
                 const categoryOrder = await CategoryOrder.findOne({ _id: new ObjectId("654d16dc1241d62b6e3e6c09") }) // will make it dynamic later
@@ -89,11 +110,33 @@ const loginUser = async (req: Request, res: Response) => {
                         break
                     }
                 }
+                const isCategoryInHistory = userHistory?.all_categories_accessed.find((category: any) => category.category_id.equals(nextCategory))
+                if (!isCategoryInHistory) {
+                    const updateAllCategoriesAccessed = await UserHistory.updateOne({ user_id: new ObjectId(user._id) }, {
+                        $push: {
+                            all_categories_accessed: {
+                                category_id: nextCategory,
+                                accessed_at: new Date(),
+                                is_skipped: false,
+                                skipped_attempt: 0,
+                                skipped_timestamps: []
+                            }
+                        }
+                    })
+                } else {
+                    const accessTime = await UserHistory.updateOne({ user_id: new ObjectId(user._id), "all_categories_accessed.category_id": nextCategory }, {
+                        $set: {
+                            "all_categories_accessed.$.accessed_at": new Date()
+                        }
+                    })
+
+                }
                 const updateLastCategoryAccessed = await UserHistory.updateOne({ user_id: new ObjectId(user._id) }, {
                     $set: {
                         last_category_accessed: nextCategory
-                    }
+                    },
                 })
+
                 const userAnswer = await UserAnswers.findOne({ user_id: new ObjectId(user._id), category_id: nextCategory })
                 if (!userAnswer) {
                     const createUserAnswer = await UserAnswers.create({
@@ -150,9 +193,50 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
 
     } catch (e: any) {
         console.log(e.message)
-        return res.json({ success: false, message: "Internal Server Error Occurred" })
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
     }
 }
 
+const skipQuestion = async (req: Request, res: Response) => {
+    try {
+        const { question_id, interview_key } = req.body
+        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key), "details.question_id": question_id })
+        if (!userAnswer) {
+            return res.json({ success: false, message: "Invalid Interview Key or question not found" })
+        }
+        if (!userAnswer.skip_questions_ids.includes(question_id)) {
+            const updateSkipQuestion = await UserAnswers.updateOne({ _id: new ObjectId(interview_key), "details.question_id": question_id }, {
+                $push: {
+                    skip_questions_ids: question_id
+                },
+                $inc: {
+                    total_questions_skipped: 1
+                },
+                $set: {
+                    "details.$.is_skipped": true
+                }
+            });
+        }
+        const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
+            $set: {
+                "all_categories_accessed.$.is_skipped": true
+            }
+        });
+        return res.json({ success: true, message: "Question Skipped Successfully" })
+        // return res.json({ success: false, message: "Question Already Skipped" })
+    } catch (err: any) {
+        console.log(err.message)
+        return res.status(500).json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
 
-export default { loginUser, saveAnswerRecordings }
+const endInterview = async (req: Request, res: Response) => {
+    try {
+        // TODO
+    } catch (err: any) {
+        console.log(err.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
+
+export default { loginUser, saveAnswerRecordings, skipQuestion }

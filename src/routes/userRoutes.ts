@@ -4,6 +4,7 @@ import fileUpload from 'express-fileupload';
 const router: Router = express.Router();
 
 router.post('/login', userController.loginUser);
-router.post("/save/answer", fileUpload(), userController.saveAnswerRecordings)
+router.post("/answer/save", fileUpload(), userController.saveAnswerRecordings)
+router.post("/answer/skip", userController.skipQuestion)
 
 export default router;
