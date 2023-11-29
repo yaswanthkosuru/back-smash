@@ -65,7 +65,8 @@ const loginUser = async (req: Request, res: Response) => {
                 return res.status(400).json({ success: false, message: "Failed to create user history" })
             }
             const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategory) })
-            return res.status(200).json({ success: true, message: "Login Successful", data: questionsByCategory })
+            const data = { ...questionsByCategory?.toJSON(), interview_key: createUserAnswer._id }
+            return res.status(200).json({ success: true, message: "Login Successful", data: data })
 
         } else {
             const updateLoginTimestamp = await UserHistory.updateOne({ user_id: new ObjectId(user._id) }, {
@@ -97,7 +98,7 @@ const loginUser = async (req: Request, res: Response) => {
                         question_data.push(questions[i])
                     }
                 }
-                const data = { ...questionsByCategory?.toJSON(), questions: question_data }
+                const data = { ...questionsByCategory?.toJSON(), questions: question_data, interview_key: userAnswers?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data });
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed
@@ -150,7 +151,8 @@ const loginUser = async (req: Request, res: Response) => {
                     }
                 }
                 const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(nextCategory) })
-                return res.status(200).json({ success: true, message: "Login Successful", data: questionsByCategory })
+                const data = { ...questionsByCategory?.toJSON(), interview_key: userAnswer?._id }
+                return res.status(200).json({ success: true, message: "Login Successful", data: data })
             }
 
         }
@@ -239,4 +241,48 @@ const endInterview = async (req: Request, res: Response) => {
     }
 }
 
-export default { loginUser, saveAnswerRecordings, skipQuestion }
+const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
+    try {
+        const { question_id, interview_key, answer } = req.body
+        const answerObj = {
+            question_id: question_id,
+            is_skipped: false,
+            answer_audio_link: null,
+            answer_transcript: answer,
+            summary: '',
+            keywords: [],
+            answered_at: new Date()
+        }
+        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key), "details.question_id": question_id })
+        if (userAnswer) {
+            const updateAnswer = await UserAnswers.updateOne({ _id: new ObjectId(interview_key), "details.question_id": question_id }, {
+                $set: {
+                    "details.$.answer_transcript": answer,
+                    "details.$.answered_at": new Date(),
+                }
+            })
+            if (updateAnswer.modifiedCount === 0) {
+                return res.json({ success: false, message: "Error Saving Answer" })
+            }
+        } else {
+            const updateAnswer = await UserAnswers.updateOne({ _id: new ObjectId(interview_key) }, {
+                $push: {
+                    details: answerObj
+                },
+                $inc: {
+                    total_questions_answered: 1
+                }
+            })
+            if (updateAnswer.modifiedCount === 0) {
+                return res.json({ success: false, message: "Error Saving Answer" })
+            }
+        }
+
+        return res.json({ success: true, message: "Answer Saved Successfully" })
+    } catch (err: any) {
+        console.log(err.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
+
+export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer }

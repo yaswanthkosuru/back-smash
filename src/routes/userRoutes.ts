@@ -6,5 +6,6 @@ const router: Router = express.Router();
 router.post('/login', userController.loginUser);
 router.post("/answer/save", fileUpload(), userController.saveAnswerRecordings)
 router.post("/answer/skip", userController.skipQuestion)
+router.post("/answer/save/multiple-choice", userController.saveMultipleChoiceAnswer)
 
 export default router;
