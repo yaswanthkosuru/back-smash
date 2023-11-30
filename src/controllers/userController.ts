@@ -167,6 +167,7 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         if (!question_id || !interview_key) {
             return res.json({ success: false, message: "Question ID or Interview Key Missing" })
         }
+        console.log(question_id, interview_key)
         const recording = req?.files?.recording
         if (!recording || !recording.mimetype) {
             return res.json({ success: false, message: "Recording Missing" })
@@ -202,7 +203,8 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
 const skipQuestion = async (req: Request, res: Response) => {
     try {
         const { question_id, interview_key } = req.body
-        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key), "details.question_id": question_id })
+        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key) })
+        console.log(userAnswer)
         if (!userAnswer) {
             return res.json({ success: false, message: "Invalid Interview Key or question not found" })
         }
@@ -259,6 +261,9 @@ const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
                 $set: {
                     "details.$.answer_transcript": answer,
                     "details.$.answered_at": new Date(),
+                },
+                $pull:{
+                    skip_questions_ids: question_id
                 }
             })
             if (updateAnswer.modifiedCount === 0) {
@@ -271,6 +276,9 @@ const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
                 },
                 $inc: {
                     total_questions_answered: 1
+                },
+                $pull: {
+                    skip_questions_ids: question_id
                 }
             })
             if (updateAnswer.modifiedCount === 0) {
