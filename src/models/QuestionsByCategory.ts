@@ -22,7 +22,7 @@ interface IQuestionsByCategory extends mongoose.Document {
     mobile_video_link: string;
     mobile_intro_video_link: string;
     timestamps: Timestamp[];
-    listening_timestamp: Timestamp;
+    listening_timestamps: Timestamp;
     questions: Question[];
     questions_timestamps: Timestamp[];
     response_timestamps: Timestamp[];
@@ -55,7 +55,7 @@ const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
         type: [],
         default: []
     },
-    listening_timestamp: {
+    listening_timestamps: {
         type: Object,
         default: { start_time: 0, end_time: 0 }
     },
