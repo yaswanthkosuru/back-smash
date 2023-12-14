@@ -40,11 +40,25 @@ const loginUser = async (req: Request, res: Response) => {
             }
             const categoryOrder = await CategoryOrder.findOne({ _id: new ObjectId("654d16dc1241d62b6e3e6c09") }) // will make it dynamic later
             const firstCategory: any = categoryOrder?.order[0]
+            const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategory) })
+            const details = []
+            for (let i = 0; i < (questionsByCategory?.questions?.length ?? 0); i++) {
+                details.push({
+                    question_id: questionsByCategory?.questions[i].question_id,
+                    is_skipped: false,
+                    answer_audio_link: null,
+                    answer_transcript: null,
+                    summary: '',
+                    keywords: [],
+                    answered_at: null
+                })
+            }
             const createUserAnswer = await UserAnswers.create({
                 smash_user_id,
                 user_id: newUser._id,
                 category_id: firstCategory,
-                attempt_date_time: new Date()
+                attempt_date_time: new Date(),
+                details: details
             })
             if (!createUserAnswer) {
                 return res.status(400).json({ success: false, message: "Failed to create user answer" })
@@ -64,7 +78,6 @@ const loginUser = async (req: Request, res: Response) => {
             if (!createUserHistory) {
                 return res.status(400).json({ success: false, message: "Failed to create user history" })
             }
-            const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategory) })
             const data = { ...questionsByCategory?.toJSON(), interview_key: createUserAnswer._id }
             return res.status(200).json({ success: true, message: "Login Successful", data: data })
 
@@ -262,7 +275,7 @@ const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
                     "details.$.answer_transcript": answer,
                     "details.$.answered_at": new Date(),
                 },
-                $pull:{
+                $pull: {
                     skip_questions_ids: question_id
                 }
             })
