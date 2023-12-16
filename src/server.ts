@@ -9,11 +9,13 @@ import cors from "cors"
 
 const app: Application = express()
 const PORT = process.env.PORT || 3001
+//connect to mongodb
 connectToMongoDB()
 app.use(express.urlencoded({ extended: true }))
 app.use(express.json())
 app.use(cors())
 
+//app.use request
 app.use((req: Request, res: Response, next: NextFunction) => {
     console.log(`${new Date().toString()} => ${req.method} ${req.originalUrl}`)
     next()
@@ -23,6 +25,7 @@ app.get('/', (req: Request, res: Response) => {
     res.send("Working Fine!!")
 })
 
+// api routes
 app.use('/questionsByCategory', questionByCategoryRoutes)
 app.use('/categoryOrder', categoryOrderRoutes)
 app.use('/user', userRoutes)
