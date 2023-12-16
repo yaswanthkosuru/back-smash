@@ -111,7 +111,9 @@ const loginUser = async (req: Request, res: Response) => {
                         question_data.push(questions[i])
                     }
                 }
-                const data = { ...questionsByCategory?.toJSON(), questions: question_data, interview_key: userAnswers?._id }
+                const skipped_intro_videos = questionsByCategory?.skip_intro_videos || []
+                const intro_link = skipped_intro_videos[Math.floor(Math.random() * skipped_intro_videos.length)]
+                const data = { ...questionsByCategory?.toJSON(), desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data });
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed

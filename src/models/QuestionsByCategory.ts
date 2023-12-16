@@ -10,14 +10,24 @@ interface Question {
     question_text: string;
     question_type: string;
     question_options: string[];
+    system_prompt: string;
+    user_prompt: string;
 }
 interface IQuestionsByCategory extends mongoose.Document {
     category: string;
-    desktop_video_link: { male: string, female: string };
-    mobile_video_link: { male: string, female: string };
+    // desktop_video_link: { male: string, female: string };
+    desktop_video_link: string;
+    desktop_intro_video_link: string;
+    // mobile_video_link: { male: string, female: string };
+    mobile_video_link: string;
+    mobile_intro_video_link: string;
     timestamps: Timestamp[];
     listening_timestamp: Timestamp;
     questions: Question[];
+    questions_timestamps: Timestamp[];
+    response_timestamps: Timestamp[];
+    skip_timestamps: Timestamp[];
+    skip_intro_videos: []
 }
 
 const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
@@ -26,12 +36,20 @@ const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
         required: true
     },
     desktop_video_link: {
-        type: Object,
-        default: { male: "", female: "" }
+        type: String,
+        default: ""
     },
     mobile_video_link: {
-        type: Object,
-        default: { male: "", female: "" }
+        type: String,
+        default: ""
+    },
+    desktop_intro_video_link: {
+        type: String,
+        default: ""
+    },
+    mobile_intro_video_link: {
+        type: String,
+        default: ""
     },
     timestamps: {
         type: [],
@@ -42,6 +60,24 @@ const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
         default: { start_time: 0, end_time: 0 }
     },
     questions: {
+        type: [],
+        default: []
+    },
+    questions_timestamps: {
+        type: [],
+        default: []
+
+    },
+    response_timestamps: {
+        type: [],
+        default: []
+
+    },
+    skip_timestamps: {
+        type: [],
+        default: []
+    },
+    skip_intro_videos: {
         type: [],
         default: []
     }
