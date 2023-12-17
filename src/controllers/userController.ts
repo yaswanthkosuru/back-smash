@@ -9,22 +9,24 @@ import QuestionsByCategory from "../models/QuestionsByCategory"
 
 // Azure Imports
 import { BlobServiceClient } from "@azure/storage-blob"
+import { DefaultAzureCredential } from "@azure/identity";
+
 
 // Use the below if using default credentials
-// import { DefaultAzureCredential } from "@azure/identity"
-// const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
-// const credential = new DefaultAzureCredential();
-// if (!accountName) {
-//     console.log("Please set the AZURE_STORAGE_ACCOUNT_NAME environment variable.");
-// }
-// const blobServiceClient = new BlobServiceClient(
-//     `https://${accountName}.blob.core.windows.net`,
-//     credential
-// );
+const accountName = process.env.AZURE_STORAGE_ACCOUNT_NAME;
+const credential = new DefaultAzureCredential();
+if (!accountName) {
+    console.log("Please set the AZURE_STORAGE_ACCOUNT_NAME environment variable.");
+}
+const blobServiceClient = new BlobServiceClient(
+    `https://${accountName}.blob.core.windows.net`,
+    credential
+);
 
-// This will be used when using the connection string method.
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
-const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+//const client = new SecretClient("https://{keyvaultname}.vault.azure.net/", credential);
+//console.log('client', client);
+// const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
+// const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
 
 
 const loginUser = async (req: Request, res: Response) => {
