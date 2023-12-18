@@ -15,7 +15,9 @@ const UserSchema = new Schema<IUser>({
     },
     smash_user_id: {
         type: String,
-        required: true
+        required: true,
+        index: true,
+        unique: true
     },
     bot_preference: {
         type: String,
