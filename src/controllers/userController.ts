@@ -33,13 +33,16 @@ const loginUser = async (req: Request, res: Response) => {
     try {
         const { name, smash_user_id, bot_preference } = req.body
         const user = await User.findOne({ smash_user_id })
+        console.log('smash_user_id', smash_user_id)
+        console.log('userExist', user)
         if (!user) {
-            const newUser = await User.create({
+            const newUser = await User.findOneAndUpdate({ smash_user_id }, {
                 name,
                 smash_user_id,
                 bot_preference,
                 last_login: new Date()
-            })
+            }, { upsert: true, new: true })
+            console.log('newUser', newUser)
             if (!newUser) {
                 return res.status(400).json({ success: false, message: "Failed to create user" })
             }
@@ -58,18 +61,22 @@ const loginUser = async (req: Request, res: Response) => {
                     answered_at: null
                 })
             }
-            const createUserAnswer = await UserAnswers.create({
+            const createUserAnswer = await UserAnswers.findOneAndUpdate({
+                smash_user_id, user_id: newUser._id,
+                category_id: firstCategory,
+            }, {
                 smash_user_id,
                 user_id: newUser._id,
                 category_id: firstCategory,
                 attempt_date_time: new Date(),
                 details: details
-            })
+            }, { upsert: true, new: true })
             if (!createUserAnswer) {
                 return res.status(400).json({ success: false, message: "Failed to create user answer" })
             }
-            const createUserHistory = await UserHistory.create({
+            const createUserHistory = await UserHistory.findOneAndUpdate({ smash_user_id }, {
                 user_id: newUser._id,
+                smash_user_id,
                 last_category_accessed: firstCategory,
                 login_timestamps: [new Date()],
                 all_categories_accessed: [{
@@ -79,7 +86,7 @@ const loginUser = async (req: Request, res: Response) => {
                     skipped_attempt: 0,
                     skipped_timestamps: []
                 }]
-            })
+            }, { upsert: true, new: true })
             if (!createUserHistory) {
                 return res.status(400).json({ success: false, message: "Failed to create user history" })
             }
@@ -159,18 +166,33 @@ const loginUser = async (req: Request, res: Response) => {
                 })
 
                 const userAnswer = await UserAnswers.findOne({ user_id: new ObjectId(user._id), category_id: nextCategory })
+                const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(nextCategory) })
                 if (!userAnswer) {
-                    const createUserAnswer = await UserAnswers.create({
+                    const details = []
+                    for (let i = 0; i < (questionsByCategory?.questions?.length ?? 0); i++) {
+                        details.push({
+                            question_id: questionsByCategory?.questions[i].question_id,
+                            is_skipped: false,
+                            answer_audio_link: null,
+                            answer_transcript: null,
+                            summary: '',
+                            keywords: [],
+                            answered_at: null
+                        })
+                    }
+                    const createUserAnswer = await UserAnswers.findOneAndUpdate({ smash_user_id, user_id: user._id, category_id: nextCategory }, {
                         smash_user_id,
                         user_id: user._id,
                         category_id: nextCategory,
-                        attempt_date_time: new Date()
-                    })
+                        attempt_date_time: new Date(),
+                        details: details
+                    }, { upsert: true, new: true })
                     if (!createUserAnswer) {
                         return res.status(400).json({ success: false, message: "Failed to create user answer" })
                     }
+                    const data = { ...questionsByCategory?.toJSON(), interview_key: createUserAnswer?._id }
+                    return res.status(200).json({ success: true, message: "Login Successful", data: data })
                 }
-                const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(nextCategory) })
                 const data = { ...questionsByCategory?.toJSON(), interview_key: userAnswer?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data })
             }
@@ -254,6 +276,42 @@ const skipQuestion = async (req: Request, res: Response) => {
     }
 }
 
+const skipAllQuestions = async (req: Request, res: Response) => {
+    try {
+        const { interview_key } = req.body
+        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key) })
+        if (!userAnswer) {
+            return res.json({ success: false, message: "Invalid Interview Key or question not found" })
+        }
+        const skipped = userAnswer?.skip_questions_ids || []
+        for (let i = 0; i < (userAnswer?.details?.length ?? 0) - 1; i++) {
+            if (!userAnswer?.details[i].answer_transcript && !skipped.includes(userAnswer?.details[i].question_id as number)) {
+                skipped.push(userAnswer?.details[i].question_id as number)
+                // userAnswer.details[i].is_skipped = true
+            }
+        }
+        for(let id of skipped) {
+            userAnswer.details[id].is_skipped = true
+        }
+        await UserAnswers.updateOne({ _id: new ObjectId(interview_key) }, {
+            $set: {
+                details: userAnswer.details,
+                skip_questions_ids: skipped,
+                total_questions_skipped: skipped.length
+            }
+        })
+        const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
+            $set: {
+                "all_categories_accessed.$.is_skipped": true
+            }
+        });
+        return res.json({ success: true, message: "All Questions Skipped Successfully" })
+    } catch (err: any) {
+        console.log(err.message)
+        return res.status(500).json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
+
 const endInterview = async (req: Request, res: Response) => {
     try {
         // TODO
@@ -313,4 +371,4 @@ const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
     }
 }
 
-export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer }
+export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer, skipAllQuestions }
