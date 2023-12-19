@@ -290,7 +290,7 @@ const skipAllQuestions = async (req: Request, res: Response) => {
                 // userAnswer.details[i].is_skipped = true
             }
         }
-        for(let id of skipped) {
+        for (let id of skipped) {
             userAnswer.details[id].is_skipped = true
         }
         await UserAnswers.updateOne({ _id: new ObjectId(interview_key) }, {
@@ -371,4 +371,36 @@ const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
     }
 }
 
-export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer, skipAllQuestions }
+const getUserTranscript = async (req: Request, res: Response) => {
+    try {
+        const { smash_user_id, interview_key } = req.body
+        const userAnswer = await UserAnswers.findOne({ smash_user_id, _id: new ObjectId(interview_key) })
+        if (!userAnswer) {
+            return res.json({ success: false, message: "Invalid Interview Key" })
+        }
+        const category_id = userAnswer?.category_id
+        const questionsByCategory = await QuestionsByCategory.findOne({ _id: category_id })
+        const questions = questionsByCategory?.questions || []
+        const data = []
+        for (let i = 0; i < questions.length - 1; i++) {
+            const question = questions[i]
+            const answer = userAnswer?.details.find((answer: any) => answer.question_id === question.question_id)
+            if (answer) {
+                data.push({
+                    question_id: question.question_id,
+                    question: question.question_text,
+                    answer: answer.answer_transcript,
+                    summary: answer.summary,
+                    keywords: answer.keywords.join(", "),
+                    skipped: answer.is_skipped
+                })
+            }
+        }
+        return res.json({ success: true, message: "Transcript Fetched Successfully", data: data })
+    } catch (err: any) {
+        console.log(err.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
+
+export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer, skipAllQuestions, getUserTranscript }
