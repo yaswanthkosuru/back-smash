@@ -117,16 +117,26 @@ const loginUser = async (req: Request, res: Response) => {
                 const skipped_questions = userAnswers?.skip_questions_ids || []
                 const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategorySkipped.category_id) })
                 const questions = questionsByCategory?.questions || []
+                let questions_timestamps = []
+                let response_timestamps = []
+                let skip_timestamps = []
                 let question_data = []
                 for (let i = 0; i < (questions?.length); i++) {
                     if (skipped_questions.includes(questions[i].question_id)) {
                         question_data.push(questions[i])
+                        questions_timestamps.push(questionsByCategory?.questions_timestamps[i])
+                        response_timestamps.push(questionsByCategory?.response_timestamps[i])
+                        skip_timestamps.push(questionsByCategory?.skip_timestamps[i])
+
                     }
                 }
+                question_data.push(questions[questions.length - 1])
+                questions_timestamps.push(questionsByCategory?.questions_timestamps[questions.length - 1])
                 const skipped_intro_videos = questionsByCategory?.skip_intro_videos || []
                 const intro_link = skipped_intro_videos[Math.floor(Math.random() * skipped_intro_videos.length)]
-                const data = { ...questionsByCategory?.toJSON(), desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
+                const data = { ...questionsByCategory?.toJSON(), questions_timestamps: questions_timestamps, response_timestamps: response_timestamps, skip_timestamps: skip_timestamps, desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data });
+
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed
                 const categoryOrder = await CategoryOrder.findOne({ _id: new ObjectId("654d16dc1241d62b6e3e6c09") }) // will make it dynamic later
