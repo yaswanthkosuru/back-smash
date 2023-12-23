@@ -6,6 +6,8 @@ import CategoryOrder from "../models/CategoryOrder"
 import { ObjectId } from "mongodb"
 import UserHistory from "../models/UserHistory"
 import QuestionsByCategory from "../models/QuestionsByCategory"
+import { transcribeRecording } from "../utils/transcribe";
+import { getQuestionDetails, getAnswerEvaluation, updateAnswerEvaluation } from "../utils/utils";
 
 // Azure Imports
 import { BlobServiceClient } from "@azure/storage-blob"
@@ -217,18 +219,18 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
     try {
         const { question_id, interview_key } = req.body
         if (!question_id || !interview_key) {
-            return res.json({ success: false, message: "Question ID or Interview Key Missing" })
+          return res.json({ success: false, message: "Question ID or Interview Key Missing" })
         }
         console.log(question_id, interview_key)
         const recording = req?.files?.recording
         if (!recording || !recording.mimetype) {
-            return res.json({ success: false, message: "Recording Missing" })
+          return res.json({ success: false, message: "Recording Missing" })
         }
         const containerClient = blobServiceClient.getContainerClient("qa-smash-container");
 
         if (!await containerClient.exists()) {
-            const createContainerResponse = await containerClient.create();
-            console.log(`Container was created successfully.\n\trequestId:${createContainerResponse.requestId}\n\tURL: ${containerClient.url}`);
+          const createContainerResponse = await containerClient.create();
+          console.log(`Container was created successfully.\n\trequestId:${createContainerResponse.requestId}\n\tURL: ${containerClient.url}`);
         }
 
         const blobType = recording.mimetype.split('/')[1]
@@ -236,19 +238,44 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         const blockBlobClient = containerClient.getBlockBlobClient(blobName);
         console.log(`\nUploading to Azure storage as blob\n\tname: ${blobName}:\n\tURL: ${blockBlobClient.url}`);
         const uploadBlobResponse = await blockBlobClient.upload(recording.data, recording.data.length, {
-            metadata: { question_id, interview_key }
+          metadata: { question_id, interview_key }
         });
+        console.log('recording', recording);
         if (uploadBlobResponse.errorCode) {
-            console.log(uploadBlobResponse.errorCode)
-            return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
+          console.log(uploadBlobResponse.errorCode)
+          return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
         }
         console.log(`Blob was uploaded successfully. requestId: ${uploadBlobResponse.requestId}`);
+        /**
+         * Send response to frontend after the blob has been uploaded
+         * This unblocks the user on the frontend
+         */
+        res.json({ success: true, message: "Recording saved successfully", url: blockBlobClient.url })
+        /**
+         * After uploading the blob to azure storage, do the following
+         * 1. Transcribe the recording
+         * 2. Perform evaluations
+         * 3. Save results in the database
+         */
+        const transcription = await transcribeRecording(blockBlobClient.url);
+        const interviewDetails = await getQuestionDetails({ interviewKey: interview_key, questionId: question_id });
+        const answerEvaluation = await getAnswerEvaluation({ interviewDetails: interviewDetails, transcription: transcription.text });
+        let evaluation = {
+          interview_key: interview_key,
+          question_id: question_id,
+          is_skipped: false,
+          answer_audio_link: blockBlobClient.url,
+          answer_transcript: transcription?.text,
+          summary: "", // TODO: will come from evaluation function
+          keywords: [answerEvaluation], // TODO: will come from evaluation function
+          answered_at: new Date(),
+      }
+        const updatedEvaluation = await updateAnswerEvaluation(evaluation)
 
-        return res.json({ success: true, message: "Recording saved successfully", url: blockBlobClient.url })
-
+        if (updatedEvaluation) return true;
     } catch (e: any) {
-        console.log(e.message)
-        return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
+      console.log(e.message)
+      return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
     }
 }
 

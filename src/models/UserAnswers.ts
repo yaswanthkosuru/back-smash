@@ -11,7 +11,7 @@ interface Details {
     answered_at: Date;
 }
 
-interface IUserAnswers extends mongoose.Document {
+export interface IUserAnswers extends mongoose.Document {
     smash_user_id: string;
     user_id: mongoose.Schema.Types.ObjectId;
     attempt_number: number;
