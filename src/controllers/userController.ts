@@ -1,15 +1,18 @@
+import { checkIfAllQuestionsAnswered } from './../utils/utils';
 
-import { Request, Response } from "express"
-import User from "../models/User"
-import UserAnswers from "../models/UserAnswers"
-import CategoryOrder from "../models/CategoryOrder"
-import { ObjectId } from "mongodb"
-import UserHistory from "../models/UserHistory"
-import QuestionsByCategory from "../models/QuestionsByCategory"
+import { Request, Response } from "express";
+import { ObjectId } from "mongodb";
+import CategoryOrder from "../models/CategoryOrder";
+import QuestionsByCategory from "../models/QuestionsByCategory";
+import User from "../models/User";
+import UserAnswers from "../models/UserAnswers";
+import UserHistory from "../models/UserHistory";
+import { transcribeRecording } from "../utils/transcribe";
+import { getAnswerEvaluation, getQuestionDetails, updateAnswerEvaluation } from "../utils/utils";
 
 // Azure Imports
-import { BlobServiceClient } from "@azure/storage-blob"
 import { DefaultAzureCredential } from "@azure/identity";
+import { BlobServiceClient } from "@azure/storage-blob";
 
 
 // Use the below if using default credentials
@@ -238,14 +241,39 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         const uploadBlobResponse = await blockBlobClient.upload(recording.data, recording.data.length, {
             metadata: { question_id, interview_key }
         });
+        console.log('recording', recording);
         if (uploadBlobResponse.errorCode) {
             console.log(uploadBlobResponse.errorCode)
             return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
         }
         console.log(`Blob was uploaded successfully. requestId: ${uploadBlobResponse.requestId}`);
-
-        return res.json({ success: true, message: "Recording saved successfully", url: blockBlobClient.url })
-
+        /**
+         * Send response to frontend after the blob has been uploaded
+         * This unblocks the user on the frontend
+         */
+        res.json({ success: true, message: "Recording saved successfully", url: blockBlobClient.url })
+        /**
+         * After uploading the blob to azure storage, do the following
+         * 1. Transcribe the recording
+         * 2. Perform evaluations
+         * 3. Save results in the database
+         */
+        const transcription = await transcribeRecording(blockBlobClient.url);
+        const interviewDetails = await getQuestionDetails({ interviewKey: interview_key, questionId: question_id });
+        const answerEvaluation = await getAnswerEvaluation({ interviewDetails: interviewDetails, transcription: transcription.text });
+        let evaluation = {
+            interview_key: interview_key,
+            question_id: question_id,
+            is_skipped: false,
+            answer_audio_link: blockBlobClient.url,
+            answer_transcript: transcription?.text,
+            summary: "", // TODO: will come from evaluation function
+            keywords: [answerEvaluation], // TODO: will come from evaluation function
+            answered_at: new Date(),
+        }
+        const updatedEvaluation = await updateAnswerEvaluation(evaluation)
+        const checkIfAllAnswered = await checkIfAllQuestionsAnswered(interview_key)
+        if (checkIfAllAnswered) return true;
     } catch (e: any) {
         console.log(e.message)
         return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
@@ -310,11 +338,13 @@ const skipAllQuestions = async (req: Request, res: Response) => {
                 total_questions_skipped: skipped.length
             }
         })
-        const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
-            $set: {
-                "all_categories_accessed.$.is_skipped": true
-            }
-        });
+        if (skipped.length !== 0) {
+            const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
+                $set: {
+                    "all_categories_accessed.$.is_skipped": true
+                }
+            });
+        }
         return res.json({ success: true, message: "All Questions Skipped Successfully" })
     } catch (err: any) {
         console.log(err.message)
