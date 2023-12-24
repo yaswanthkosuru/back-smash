@@ -1,17 +1,18 @@
+import { checkIfAllQuestionsAnswered } from './../utils/utils';
 
-import { Request, Response } from "express"
-import User from "../models/User"
-import UserAnswers from "../models/UserAnswers"
-import CategoryOrder from "../models/CategoryOrder"
-import { ObjectId } from "mongodb"
-import UserHistory from "../models/UserHistory"
-import QuestionsByCategory from "../models/QuestionsByCategory"
+import { Request, Response } from "express";
+import { ObjectId } from "mongodb";
+import CategoryOrder from "../models/CategoryOrder";
+import QuestionsByCategory from "../models/QuestionsByCategory";
+import User from "../models/User";
+import UserAnswers from "../models/UserAnswers";
+import UserHistory from "../models/UserHistory";
 import { transcribeRecording } from "../utils/transcribe";
-import { getQuestionDetails, getAnswerEvaluation, updateAnswerEvaluation } from "../utils/utils";
+import { getAnswerEvaluation, getQuestionDetails, updateAnswerEvaluation } from "../utils/utils";
 
 // Azure Imports
-import { BlobServiceClient } from "@azure/storage-blob"
 import { DefaultAzureCredential } from "@azure/identity";
+import { BlobServiceClient } from "@azure/storage-blob";
 
 
 // Use the below if using default credentials
@@ -219,18 +220,18 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
     try {
         const { question_id, interview_key } = req.body
         if (!question_id || !interview_key) {
-          return res.json({ success: false, message: "Question ID or Interview Key Missing" })
+            return res.json({ success: false, message: "Question ID or Interview Key Missing" })
         }
         console.log(question_id, interview_key)
         const recording = req?.files?.recording
         if (!recording || !recording.mimetype) {
-          return res.json({ success: false, message: "Recording Missing" })
+            return res.json({ success: false, message: "Recording Missing" })
         }
         const containerClient = blobServiceClient.getContainerClient("qa-smash-container");
 
         if (!await containerClient.exists()) {
-          const createContainerResponse = await containerClient.create();
-          console.log(`Container was created successfully.\n\trequestId:${createContainerResponse.requestId}\n\tURL: ${containerClient.url}`);
+            const createContainerResponse = await containerClient.create();
+            console.log(`Container was created successfully.\n\trequestId:${createContainerResponse.requestId}\n\tURL: ${containerClient.url}`);
         }
 
         const blobType = recording.mimetype.split('/')[1]
@@ -238,12 +239,12 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         const blockBlobClient = containerClient.getBlockBlobClient(blobName);
         console.log(`\nUploading to Azure storage as blob\n\tname: ${blobName}:\n\tURL: ${blockBlobClient.url}`);
         const uploadBlobResponse = await blockBlobClient.upload(recording.data, recording.data.length, {
-          metadata: { question_id, interview_key }
+            metadata: { question_id, interview_key }
         });
         console.log('recording', recording);
         if (uploadBlobResponse.errorCode) {
-          console.log(uploadBlobResponse.errorCode)
-          return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
+            console.log(uploadBlobResponse.errorCode)
+            return res.json({ success: false, message: "Error Occurred while saving recording, Try Again." })
         }
         console.log(`Blob was uploaded successfully. requestId: ${uploadBlobResponse.requestId}`);
         /**
@@ -261,21 +262,21 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         const interviewDetails = await getQuestionDetails({ interviewKey: interview_key, questionId: question_id });
         const answerEvaluation = await getAnswerEvaluation({ interviewDetails: interviewDetails, transcription: transcription.text });
         let evaluation = {
-          interview_key: interview_key,
-          question_id: question_id,
-          is_skipped: false,
-          answer_audio_link: blockBlobClient.url,
-          answer_transcript: transcription?.text,
-          summary: "", // TODO: will come from evaluation function
-          keywords: [answerEvaluation], // TODO: will come from evaluation function
-          answered_at: new Date(),
-      }
+            interview_key: interview_key,
+            question_id: question_id,
+            is_skipped: false,
+            answer_audio_link: blockBlobClient.url,
+            answer_transcript: transcription?.text,
+            summary: "", // TODO: will come from evaluation function
+            keywords: [answerEvaluation], // TODO: will come from evaluation function
+            answered_at: new Date(),
+        }
         const updatedEvaluation = await updateAnswerEvaluation(evaluation)
-
-        if (updatedEvaluation) return true;
+        const checkIfAllAnswered = await checkIfAllQuestionsAnswered(interview_key)
+        if (checkIfAllAnswered) return true;
     } catch (e: any) {
-      console.log(e.message)
-      return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
+        console.log(e.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
     }
 }
 
@@ -337,11 +338,13 @@ const skipAllQuestions = async (req: Request, res: Response) => {
                 total_questions_skipped: skipped.length
             }
         })
-        const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
-            $set: {
-                "all_categories_accessed.$.is_skipped": true
-            }
-        });
+        if (skipped.length !== 0) {
+            const updateHistory = await UserHistory.updateOne({ user_id: userAnswer.user_id, "all_categories_accessed.category_id": userAnswer.category_id }, {
+                $set: {
+                    "all_categories_accessed.$.is_skipped": true
+                }
+            });
+        }
         return res.json({ success: true, message: "All Questions Skipped Successfully" })
     } catch (err: any) {
         console.log(err.message)
