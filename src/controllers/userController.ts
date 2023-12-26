@@ -49,8 +49,9 @@ const loginUser = async (req: Request, res: Response) => {
             if (!newUser) {
                 return res.status(400).json({ success: false, message: "Failed to create user" })
             }
-            const categoryOrder = await CategoryOrder.findOne({ _id: new ObjectId("654d16dc1241d62b6e3e6c09") }) // will make it dynamic later
-            const firstCategory: any = categoryOrder?.order[0]
+            //get the first category in the category order
+            const categoryOrder: any = await CategoryOrder.find()
+            const firstCategory: any = categoryOrder[0]?.order[0]
             const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategory) })
             const details = []
             for (let i = 0; i < (questionsByCategory?.questions?.length ?? 0); i++) {
@@ -142,8 +143,8 @@ const loginUser = async (req: Request, res: Response) => {
 
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed
-                const categoryOrder = await CategoryOrder.findOne({ _id: new ObjectId("654d16dc1241d62b6e3e6c09") }) // will make it dynamic later
-                const order: any = categoryOrder?.order
+                const categoryOrder: any = await CategoryOrder.findOne()
+                const order: any = categoryOrder[0]?.order
                 let nextCategory: any = ""
                 for (let i = 0; i < order.length; i++) {
                     if (order[i].equals(lastCategoryAccessed)) {
