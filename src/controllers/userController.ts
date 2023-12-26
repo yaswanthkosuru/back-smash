@@ -143,7 +143,8 @@ const loginUser = async (req: Request, res: Response) => {
 
             } else {
                 const lastCategoryAccessed = userHistory?.last_category_accessed
-                const categoryOrder: any = await CategoryOrder.findOne()
+                const categoryOrder: any = await CategoryOrder.find()
+                console.log('categoryOrder', categoryOrder);
                 const order: any = categoryOrder[0]?.order
                 let nextCategory: any = ""
                 for (let i = 0; i < order.length; i++) {
