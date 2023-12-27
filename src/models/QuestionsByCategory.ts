@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 const { Schema } = mongoose
 
 interface Timestamp {
@@ -15,19 +15,17 @@ interface Question {
 }
 interface IQuestionsByCategory extends mongoose.Document {
     category: string;
-    // desktop_video_link: { male: string, female: string };
-    desktop_video_link: string;
-    desktop_intro_video_link: string;
-    // mobile_video_link: { male: string, female: string };
-    mobile_video_link: string;
-    mobile_intro_video_link: string;
-    timestamps: Timestamp[];
-    listening_timestamps: Timestamp;
+    desktop_video_link: { male: string, female: string };
+    desktop_intro_video_link: { male: string, female: string };
+    mobile_video_link: { male: string, female: string };
+    mobile_intro_video_link: { male: string, female: string };
+    // timestamps: Timestamp[];
+    listening_timestamps: { male: Timestamp, female: Timestamp };
     questions: Question[];
-    questions_timestamps: Timestamp[];
-    response_timestamps: Timestamp[];
-    skip_timestamps: Timestamp[];
-    skip_intro_videos: []
+    questions_timestamps: { male: Timestamp[], female: Timestamp[] };
+    response_timestamps: { male: Timestamp[], female: Timestamp[] };
+    skip_timestamps: { male: Timestamp[], female: Timestamp[] };
+    skip_intro_videos: { male: [], female: [] };
 }
 
 const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
@@ -36,50 +34,46 @@ const QuestionsByCategorySchema = new Schema<IQuestionsByCategory>({
         required: true
     },
     desktop_video_link: {
-        type: String,
-        default: ""
+        type: Object,
+        default: { male: "", female: "" }
     },
     mobile_video_link: {
-        type: String,
-        default: ""
+        type: Object,
+        default: { male: "", female: "" }
     },
     desktop_intro_video_link: {
-        type: String,
-        default: ""
+        type: Object,
+        default: { male: "", female: "" }
     },
     mobile_intro_video_link: {
-        type: String,
-        default: ""
-    },
-    timestamps: {
-        type: [],
-        default: []
+        type: Object,
+        default: { male: "", female: "" }
     },
     listening_timestamps: {
         type: Object,
-        default: { start_time: 0, end_time: 0 }
+        default: { male: { start_time: 0, end_time: 0 }, female: { start_time: 0, end_time: 0 } }
     },
     questions: {
         type: [],
         default: []
     },
     questions_timestamps: {
-        type: [],
-        default: []
+        type: { male: [], female: [] },
+        default: { male: [], female: [] }
 
     },
     response_timestamps: {
-        type: [],
-        default: []
+        type: { male: [], female: [] },
+        default: { male: [], female: [] }
 
     },
     skip_timestamps: {
-        type: [],
-        default: []
+        type: { male: [], female: [] },
+        default: { male: [], female: [] }
     },
     skip_intro_videos: {
-        type: [],
-        default: []
+        type: { male: [], female: [] },
+        default: { male: [], female: [] }
     }
 }, { timestamps: true })
 

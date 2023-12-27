@@ -31,6 +31,18 @@ const blobServiceClient = new BlobServiceClient(
 // const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
 // const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
 
+const getDataAccordingToPreference = (bot_preference: string, questionsByCategory: any) => {
+    const desktop_video_link = bot_preference === "male" ? questionsByCategory?.desktop_video_link?.male : questionsByCategory?.desktop_video_link?.female
+    const mobile_video_link = bot_preference === "male" ? questionsByCategory?.mobile_video_link?.male : questionsByCategory?.mobile_video_link?.female
+    const desktop_intro_video_link = bot_preference === "male" ? questionsByCategory?.desktop_intro_video_link?.male : questionsByCategory?.desktop_intro_video_link?.female
+    const mobile_intro_video_link = bot_preference === "male" ? questionsByCategory?.mobile_intro_video_link?.male : questionsByCategory?.mobile_intro_video_link?.female
+    const listening_timestamps = bot_preference === "male" ? questionsByCategory?.listening_timestamps?.male : questionsByCategory?.listening_timestamps?.female
+    const questions_timestamps = bot_preference === "male" ? questionsByCategory?.questions_timestamps?.male : questionsByCategory?.questions_timestamps?.female
+    const response_timestamps = bot_preference === "male" ? questionsByCategory?.response_timestamps?.male : questionsByCategory?.response_timestamps?.female
+    const skip_timestamps = bot_preference === "male" ? questionsByCategory?.skip_timestamps?.male : questionsByCategory?.skip_timestamps?.female
+    const skip_intro_videos = bot_preference === "male" ? questionsByCategory?.skip_intro_videos?.male : questionsByCategory?.skip_intro_videos?.female
+    return { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos }
+}
 
 const loginUser = async (req: Request, res: Response) => {
     try {
@@ -94,7 +106,7 @@ const loginUser = async (req: Request, res: Response) => {
             if (!createUserHistory) {
                 return res.status(400).json({ success: false, message: "Failed to create user history" })
             }
-            const data = { ...questionsByCategory?.toJSON(), interview_key: createUserAnswer._id }
+            const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(bot_preference, questionsByCategory), interview_key: createUserAnswer._id, }
             return res.status(200).json({ success: true, message: "Login Successful", data: data })
 
         } else {
@@ -121,24 +133,24 @@ const loginUser = async (req: Request, res: Response) => {
                 const skipped_questions = userAnswers?.skip_questions_ids || []
                 const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategorySkipped.category_id) })
                 const questions = questionsByCategory?.questions || []
-                let questions_timestamps = []
-                let response_timestamps = []
-                let skip_timestamps = []
+                let questions_timestamps_updated = []
+                let response_timestamps_updated = []
+                let skip_timestamps_updated = []
                 let question_data = []
+                const { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos } = getDataAccordingToPreference(user?.bot_preference, questionsByCategory)
                 for (let i = 0; i < (questions?.length); i++) {
                     if (skipped_questions.includes(questions[i].question_id)) {
                         question_data.push(questions[i])
-                        questions_timestamps.push(questionsByCategory?.questions_timestamps[i])
-                        response_timestamps.push(questionsByCategory?.response_timestamps[i])
-                        skip_timestamps.push(questionsByCategory?.skip_timestamps[i])
+                        questions_timestamps_updated.push(questions_timestamps[i])
+                        response_timestamps_updated.push(response_timestamps[i])
+                        skip_timestamps_updated.push(skip_timestamps[i])
 
                     }
                 }
                 question_data.push(questions[questions.length - 1])
-                questions_timestamps.push(questionsByCategory?.questions_timestamps[questions.length - 1])
-                const skipped_intro_videos = questionsByCategory?.skip_intro_videos || []
-                const intro_link = skipped_intro_videos[Math.floor(Math.random() * skipped_intro_videos.length)]
-                const data = { ...questionsByCategory?.toJSON(), questions_timestamps: questions_timestamps, response_timestamps: response_timestamps, skip_timestamps: skip_timestamps, desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
+                questions_timestamps_updated.push(questions_timestamps[questions.length - 1])
+                const intro_link = skip_intro_videos[Math.floor(Math.random() * skip_intro_videos.length)]
+                const data = { ...questionsByCategory?.toJSON(), desktop_video_link, mobile_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps: questions_timestamps_updated, response_timestamps: response_timestamps_updated, skip_timestamps: skip_timestamps_updated, desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data });
 
             } else {
@@ -205,10 +217,10 @@ const loginUser = async (req: Request, res: Response) => {
                     if (!createUserAnswer) {
                         return res.status(400).json({ success: false, message: "Failed to create user answer" })
                     }
-                    const data = { ...questionsByCategory?.toJSON(), interview_key: createUserAnswer?._id }
+                    const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: createUserAnswer?._id }
                     return res.status(200).json({ success: true, message: "Login Successful", data: data })
                 }
-                const data = { ...questionsByCategory?.toJSON(), interview_key: userAnswer?._id }
+                const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: userAnswer?._id }
                 return res.status(200).json({ success: true, message: "Login Successful", data: data })
             }
 
