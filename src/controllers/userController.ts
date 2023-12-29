@@ -7,12 +7,14 @@ import QuestionsByCategory from "../models/QuestionsByCategory";
 import User from "../models/User";
 import UserAnswers from "../models/UserAnswers";
 import UserHistory from "../models/UserHistory";
+import { getNextCategory, getSkippedCategoryData } from "../utils/loginLogic";
 import { transcribeRecording } from "../utils/transcribe";
-import { getAnswerEvaluation, getQuestionDetails, updateAnswerEvaluation } from "../utils/utils";
+import { getAnswerEvaluation, getDataAccordingToPreference, getQuestionDetails, updateAnswerEvaluation } from "../utils/utils";
 
 // Azure Imports
 import { DefaultAzureCredential } from "@azure/identity";
 import { BlobServiceClient } from "@azure/storage-blob";
+import Error from '../models/Error';
 
 
 // Use the below if using default credentials
@@ -30,19 +32,6 @@ const blobServiceClient = new BlobServiceClient(
 //console.log('client', client);
 // const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
 // const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
-
-const getDataAccordingToPreference = (bot_preference: string, questionsByCategory: any) => {
-    const desktop_video_link = bot_preference === "male" ? questionsByCategory?.desktop_video_link?.male : questionsByCategory?.desktop_video_link?.female
-    const mobile_video_link = bot_preference === "male" ? questionsByCategory?.mobile_video_link?.male : questionsByCategory?.mobile_video_link?.female
-    const desktop_intro_video_link = bot_preference === "male" ? questionsByCategory?.desktop_intro_video_link?.male : questionsByCategory?.desktop_intro_video_link?.female
-    const mobile_intro_video_link = bot_preference === "male" ? questionsByCategory?.mobile_intro_video_link?.male : questionsByCategory?.mobile_intro_video_link?.female
-    const listening_timestamps = bot_preference === "male" ? questionsByCategory?.listening_timestamps?.male : questionsByCategory?.listening_timestamps?.female
-    const questions_timestamps = bot_preference === "male" ? questionsByCategory?.questions_timestamps?.male : questionsByCategory?.questions_timestamps?.female
-    const response_timestamps = bot_preference === "male" ? questionsByCategory?.response_timestamps?.male : questionsByCategory?.response_timestamps?.female
-    const skip_timestamps = bot_preference === "male" ? questionsByCategory?.skip_timestamps?.male : questionsByCategory?.skip_timestamps?.female
-    const skip_intro_videos = bot_preference === "male" ? questionsByCategory?.skip_intro_videos?.male : questionsByCategory?.skip_intro_videos?.female
-    return { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos }
-}
 
 const loginUser = async (req: Request, res: Response) => {
     try {
@@ -118,109 +107,11 @@ const loginUser = async (req: Request, res: Response) => {
             const userHistory = await UserHistory.findOne({ user_id: new ObjectId(user._id) })
             const totalAttempts: any = userHistory?.login_timestamps.length
             if (totalAttempts % 3 === 0) {
-                // TODO
-                let firstCategorySkipped: any = null
-                for (let i = 0; i < (userHistory?.all_categories_accessed.length ?? 0); i++) {
-                    if (userHistory?.all_categories_accessed[i].is_skipped) {
-                        firstCategorySkipped = userHistory?.all_categories_accessed[i]
-                        break;
-                    }
-                }
-                if (!firstCategorySkipped) {
-                    return res.status(200).json({ success: false, message: "No Category Skipped" });
-                }
-                const userAnswers = await UserAnswers.findOne({ user_id: new ObjectId(user._id), category_id: firstCategorySkipped.category_id })
-                const skipped_questions = userAnswers?.skip_questions_ids || []
-                const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategorySkipped.category_id) })
-                const questions = questionsByCategory?.questions || []
-                let questions_timestamps_updated = []
-                let response_timestamps_updated = []
-                let skip_timestamps_updated = []
-                let question_data = []
-                const { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos } = getDataAccordingToPreference(user?.bot_preference, questionsByCategory)
-                for (let i = 0; i < (questions?.length); i++) {
-                    if (skipped_questions.includes(questions[i].question_id)) {
-                        question_data.push(questions[i])
-                        questions_timestamps_updated.push(questions_timestamps[i])
-                        response_timestamps_updated.push(response_timestamps[i])
-                        skip_timestamps_updated.push(skip_timestamps[i])
-
-                    }
-                }
-                question_data.push(questions[questions.length - 1])
-                questions_timestamps_updated.push(questions_timestamps[questions.length - 1])
-                const intro_link = skip_intro_videos[Math.floor(Math.random() * skip_intro_videos.length)]
-                const data = { ...questionsByCategory?.toJSON(), desktop_video_link, mobile_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps: questions_timestamps_updated, response_timestamps: response_timestamps_updated, skip_timestamps: skip_timestamps_updated, desktop_intro_video_link: intro_link, questions: question_data, interview_key: userAnswers?._id }
-                return res.status(200).json({ success: true, message: "Login Successful", data: data });
+                const skippedData = await getSkippedCategoryData(userHistory, user, smash_user_id);
+                return res.status(200).json({ success: true, message: "Login Successful", data: skippedData });
 
             } else {
-                const lastCategoryAccessed = userHistory?.last_category_accessed
-                const categoryOrder: any = await CategoryOrder.find()
-                console.log('categoryOrder', categoryOrder);
-                const order: any = categoryOrder[0]?.order
-                let nextCategory: any = ""
-                for (let i = 0; i < order.length; i++) {
-                    if (order[i].equals(lastCategoryAccessed)) {
-                        nextCategory = order[(i + 1) % order.length]
-                        break
-                    }
-                }
-                const isCategoryInHistory = userHistory?.all_categories_accessed.find((category: any) => category.category_id.equals(nextCategory))
-                if (!isCategoryInHistory) {
-                    const updateAllCategoriesAccessed = await UserHistory.updateOne({ user_id: new ObjectId(user._id) }, {
-                        $push: {
-                            all_categories_accessed: {
-                                category_id: nextCategory,
-                                accessed_at: new Date(),
-                                is_skipped: false,
-                                skipped_attempt: 0,
-                                skipped_timestamps: []
-                            }
-                        }
-                    })
-                } else {
-                    const accessTime = await UserHistory.updateOne({ user_id: new ObjectId(user._id), "all_categories_accessed.category_id": nextCategory }, {
-                        $set: {
-                            "all_categories_accessed.$.accessed_at": new Date()
-                        }
-                    })
-
-                }
-                const updateLastCategoryAccessed = await UserHistory.updateOne({ user_id: new ObjectId(user._id) }, {
-                    $set: {
-                        last_category_accessed: nextCategory
-                    },
-                })
-
-                const userAnswer = await UserAnswers.findOne({ user_id: new ObjectId(user._id), category_id: nextCategory })
-                const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(nextCategory) })
-                if (!userAnswer) {
-                    const details = []
-                    for (let i = 0; i < (questionsByCategory?.questions?.length ?? 0); i++) {
-                        details.push({
-                            question_id: questionsByCategory?.questions[i].question_id,
-                            is_skipped: false,
-                            answer_audio_link: null,
-                            answer_transcript: null,
-                            summary: '',
-                            keywords: [],
-                            answered_at: null
-                        })
-                    }
-                    const createUserAnswer = await UserAnswers.findOneAndUpdate({ smash_user_id, user_id: user._id, category_id: nextCategory }, {
-                        smash_user_id,
-                        user_id: user._id,
-                        category_id: nextCategory,
-                        attempt_date_time: new Date(),
-                        details: details
-                    }, { upsert: true, new: true })
-                    if (!createUserAnswer) {
-                        return res.status(400).json({ success: false, message: "Failed to create user answer" })
-                    }
-                    const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: createUserAnswer?._id }
-                    return res.status(200).json({ success: true, message: "Login Successful", data: data })
-                }
-                const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: userAnswer?._id }
+                const data = await getNextCategory(userHistory, user, smash_user_id);
                 return res.status(200).json({ success: true, message: "Login Successful", data: data })
             }
 
@@ -231,8 +122,8 @@ const loginUser = async (req: Request, res: Response) => {
 }
 
 const saveAnswerRecordings = async (req: any, res: Response) => {
+    const { question_id, interview_key } = req.body
     try {
-        const { question_id, interview_key } = req.body
         if (!question_id || !interview_key) {
             return res.json({ success: false, message: "Question ID or Interview Key Missing" })
         }
@@ -290,6 +181,12 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
         if (checkIfAllAnswered) return true;
     } catch (e: any) {
         console.log(e.message)
+        const error = await Error.findOneAndUpdate({ question_id, interview_key }, {
+            question_id,
+            interview_key,
+            error: e.message,
+            resolved: false
+        }, { upsert: true, new: true })
         return res.json({ success: false, message: "Internal Server Error Occurred", error: e.message })
     }
 }

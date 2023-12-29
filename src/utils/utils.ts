@@ -161,3 +161,17 @@ export const checkIfAllQuestionsAnswered = async (interviewKey: string) => {
     throw error;
   }
 }
+
+export const getDataAccordingToPreference = (botPreference: string, questionsByCategory: any) => {
+  const bot_preference = botPreference || "male";
+  const desktop_video_link = bot_preference === "male" ? questionsByCategory?.desktop_video_link?.male : questionsByCategory?.desktop_video_link?.female
+  const mobile_video_link = bot_preference === "male" ? questionsByCategory?.mobile_video_link?.male : questionsByCategory?.mobile_video_link?.female
+  const desktop_intro_video_link = bot_preference === "male" ? questionsByCategory?.desktop_intro_video_link?.male : questionsByCategory?.desktop_intro_video_link?.female
+  const mobile_intro_video_link = bot_preference === "male" ? questionsByCategory?.mobile_intro_video_link?.male : questionsByCategory?.mobile_intro_video_link?.female
+  const listening_timestamps = bot_preference === "male" ? questionsByCategory?.listening_timestamps?.male : questionsByCategory?.listening_timestamps?.female
+  const questions_timestamps = bot_preference === "male" ? questionsByCategory?.questions_timestamps?.male : questionsByCategory?.questions_timestamps?.female
+  const response_timestamps = bot_preference === "male" ? questionsByCategory?.response_timestamps?.male : questionsByCategory?.response_timestamps?.female
+  const skip_timestamps = bot_preference === "male" ? questionsByCategory?.skip_timestamps?.male : questionsByCategory?.skip_timestamps?.female
+  const skip_intro_videos = bot_preference === "male" ? questionsByCategory?.skip_intro_videos?.male : questionsByCategory?.skip_intro_videos?.female
+  return { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos }
+}
