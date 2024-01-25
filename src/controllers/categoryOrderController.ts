@@ -2,6 +2,14 @@ import { Request, Response } from "express"
 import CategoryOrder from "../models/CategoryOrder"
 import { ObjectId } from "mongodb"
 
+/**
+ * CategoryOrder is a collection that stores the order in which categories should be rendered, for e.g -
+ * 1. personal_demographic
+ * 2. learning_experience ....and so on
+ * @param req { body: order } order should be an array of mongoose ObjectIds of different categories from questionByCategories
+ * @param res { success: boolean, categoryOrder: the newly created category orders }
+ * @returns newly created category order
+ */
 const createCategoryOrder = async (req: Request, res: Response) => {
     try {
         const { order } = req.body
@@ -17,6 +25,11 @@ const createCategoryOrder = async (req: Request, res: Response) => {
     }
 }
 
+/**
+ * This function is used to append a new category in an already existing document in CategoryOrder
+ * @param req body: { category: ObjectId of the new category } , params: { id: ObjectId of categoryOrder document }
+ * @param res json{ success: boolean, message: string }
+ */
 const appendQuestionCategory = async (req: Request, res: Response) => {
     try {
         const { id } = req.params

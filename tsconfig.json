@@ -5,7 +5,7 @@
         //"noEmit": true,
         "moduleResolution": "node",
         "resolveJsonModule": true,
-        "isolatedModules": true,
+        //"isolatedModules": true,
         "esModuleInterop": true,
         "forceConsistentCasingInFileNames": true,
         "strict": true,
@@ -13,6 +13,6 @@
         "outDir": "dist",
         "rootDir": "src"
     },
-    "include": ["src/**/*.ts", "global.d.ts"],
+    "include": ["src/**/*.ts", "global.d.ts", "test/**/*.ts"],
     "exclude": ["node_modules"]
 }
