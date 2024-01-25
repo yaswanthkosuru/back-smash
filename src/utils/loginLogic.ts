@@ -9,7 +9,6 @@ export const getNextCategory = async (userHistory: any, user: any, smash_user_id
   try {
   const lastCategoryAccessed = userHistory?.last_category_accessed
   const allCategoriesAccessed = userHistory?.all_categories_accessed;
-  console.log('allCategoriesAccessed', allCategoriesAccessed);
   const categoryOrder: any = await CategoryOrder.find()
   const order: any = categoryOrder[0]?.order
   let nextCategory: any = ""
@@ -22,9 +21,7 @@ export const getNextCategory = async (userHistory: any, user: any, smash_user_id
   console.log('nextCategory', order.length);
   /** This means that the user has accessed all the categories and we want to only show the categories that were skipped by the user */
   if (allCategoriesAccessed.length === order.length) {
-    console.log('no next category available... sending skipped questions');
     const skippedQuestionsData: any = getSkippedCategoryData(userHistory, user, smash_user_id)
-    console.log('skippedQuestionsData', skippedQuestionsData);
     return skippedQuestionsData;
   }
   const isCategoryInHistory = userHistory?.all_categories_accessed.find((category: any) => category.category_id.equals(nextCategory))
@@ -77,13 +74,10 @@ export const getNextCategory = async (userHistory: any, user: any, smash_user_id
     }, { upsert: true, new: true })
     if (!createUserAnswer) {
       throw { success: false, message: "Failed to create user answer" }
-      //return res.status(400).json({ success: false, message: "Failed to create user answer" })
     }
     return { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: createUserAnswer?._id }
   }
     return { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(user?.bot_preference, questionsByCategory), interview_key: userAnswer?._id }
-    //return res.status(200).json({ success: true, message: "Login Successful", data: data })
-    //return res.status(200).json({ success: true, message: "Login Successful", data: data })
   } catch (error) {
     throw error
   }
@@ -91,12 +85,15 @@ export const getNextCategory = async (userHistory: any, user: any, smash_user_id
 
 export const getSkippedCategoryData = async (userHistory: any, user: any, smash_user_id: string) => {
   let firstCategorySkipped: any = null
+  let allSkippedCategories: any = [];
   for (let i = 0; i < (userHistory?.all_categories_accessed.length ?? 0); i++) {
     if (userHistory?.all_categories_accessed[i].is_skipped) {
-      firstCategorySkipped = userHistory?.all_categories_accessed[i]
-      break;
+      allSkippedCategories.push(userHistory?.all_categories_accessed[i]);
     }
   }
+  let randomIndex = Math.floor(Math.random() * allSkippedCategories.length);
+  console.log('randomIndex', randomIndex);
+  firstCategorySkipped = allSkippedCategories[randomIndex];
   if (!firstCategorySkipped) {
       const data = await getNextCategory(userHistory, user, smash_user_id);
       return data;
@@ -110,7 +107,7 @@ export const getSkippedCategoryData = async (userHistory: any, user: any, smash_
   let response_timestamps_updated = []
   let skip_timestamps_updated = []
   let question_data = []
-  const { desktop_video_link, mobile_video_link, desktop_intro_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos } = getDataAccordingToPreference(user?.bot_preference, questionsByCategory)
+  const { desktop_video_link, mobile_video_link, mobile_intro_video_link, listening_timestamps, questions_timestamps, response_timestamps, skip_timestamps, skip_intro_videos } = getDataAccordingToPreference(user?.bot_preference, questionsByCategory)
   for (let i = 0; i < (questions?.length); i++) {
     if (skipped_questions.includes(questions[i].question_id)) {
       question_data.push(questions[i])

@@ -6,6 +6,8 @@ interface IUser extends mongoose.Document {
     smash_user_id: string;
     bot_preference: string;
     last_login: Date;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 const UserSchema = new Schema<IUser>({

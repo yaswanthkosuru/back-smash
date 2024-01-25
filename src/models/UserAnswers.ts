@@ -22,6 +22,8 @@ export interface IUserAnswers extends mongoose.Document {
     total_questions_answered: number;
     total_questions_skipped: number;
     skip_questions_ids: number[];
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 const UserAnswersSchema = new Schema<IUserAnswers>({

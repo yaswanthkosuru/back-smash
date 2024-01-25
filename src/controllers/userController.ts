@@ -1,5 +1,3 @@
-import { checkIfAllQuestionsAnswered } from './../utils/utils';
-
 import { Request, Response } from "express";
 import { ObjectId } from "mongodb";
 import CategoryOrder from "../models/CategoryOrder";
@@ -9,7 +7,7 @@ import UserAnswers from "../models/UserAnswers";
 import UserHistory from "../models/UserHistory";
 import { getNextCategory, getSkippedCategoryData } from "../utils/loginLogic";
 import { transcribeRecording } from "../utils/transcribe";
-import { getAnswerEvaluation, getDataAccordingToPreference, getQuestionDetails, updateAnswerEvaluation } from "../utils/utils";
+import { getAnswerEvaluation, getDataAccordingToPreference, getQuestionDetails, updateAnswerEvaluation, checkIfAllQuestionsAnswered } from "../utils/utils";
 
 // Azure Imports
 import { DefaultAzureCredential } from "@azure/identity";
@@ -28,17 +26,44 @@ const blobServiceClient = new BlobServiceClient(
     credential
 );
 
-//const client = new SecretClient("https://{keyvaultname}.vault.azure.net/", credential);
-//console.log('client', client);
-// const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING || "";
-// const blobServiceClient = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+/**
+ * This function is called everytime the chatbot opens. 
+ * This checks if the user has already finished all the categories. If user has accessed all categories, we show end screen.
+ * This also checks if user has already specified a bot preference already, to show the male/female bot according to user preference.
+ * @param req { smash_user_id: string }
+ * @param res { data: string to determine the bot preference, isCompleted: boolean to identify if the end screen should be shown or not }
+ */
+const checkUserBotPreferenceAndEndStatus = async (req: Request, res: Response) => {
+    try {
+        const { smash_user_id } = req.body
+        const user = await User.findOne({ smash_user_id })
+        if (!user) {
+            return res.json({ success: false, message: "User not found" })
+        }
+        if (!user.bot_preference) {
+            return res.json({ success: false, message: "Bot Preference not found" })
+        }
+        const userHistory = await UserHistory.findOne({ smash_user_id: smash_user_id })
+        const isCompleted = userHistory?.all_categories_accessed.length === 5 && userHistory?.all_categories_accessed.every((category: any) => category.is_skipped === false)
+        return res.json({ success: true, message: "Bot Preference found", data: user.bot_preference, isCompleted: isCompleted })    
+    } catch (err: any) {
+        console.log(err.message)
+        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
+    }
+}
 
+/**
+ * This function does 3 things -
+ * 1. Checks if user exists in the system. If the user exists, find the next category id that the user is supposed to access and return that.
+ * 2. If the user does not exist, create a new user and return first category
+ * 3. If user exists and the user is logging in for the 3rd, 6th or 9th time, show a category at random that the user had skipped before.
+ * @param req { name: user name, smash_user_id: string, bot_preference: string to specify male/female }
+ * @param res { data: Object containing all the category, questions and timestamp details }
+ */
 const loginUser = async (req: Request, res: Response) => {
     try {
         const { name, smash_user_id, bot_preference } = req.body
         const user = await User.findOne({ smash_user_id })
-        console.log('smash_user_id', smash_user_id)
-        console.log('userExist', user)
         if (!user) {
             const newUser = await User.findOneAndUpdate({ smash_user_id }, {
                 name,
@@ -46,7 +71,6 @@ const loginUser = async (req: Request, res: Response) => {
                 bot_preference,
                 last_login: new Date()
             }, { upsert: true, new: true })
-            console.log('newUser', newUser)
             if (!newUser) {
                 return res.status(400).json({ success: false, message: "Failed to create user" })
             }
@@ -54,6 +78,7 @@ const loginUser = async (req: Request, res: Response) => {
             const categoryOrder: any = await CategoryOrder.find()
             const firstCategory: any = categoryOrder[0]?.order[0]
             const questionsByCategory = await QuestionsByCategory.findOne({ _id: new ObjectId(firstCategory) })
+            console.log('questionsByCategory', questionsByCategory);
             const details = []
             for (let i = 0; i < (questionsByCategory?.questions?.length ?? 0); i++) {
                 details.push({
@@ -95,7 +120,7 @@ const loginUser = async (req: Request, res: Response) => {
             if (!createUserHistory) {
                 return res.status(400).json({ success: false, message: "Failed to create user history" })
             }
-            const data = { ...questionsByCategory?.toJSON(), ...getDataAccordingToPreference(bot_preference, questionsByCategory), interview_key: createUserAnswer._id, }
+            const data = { questionsByCategory, ...getDataAccordingToPreference(bot_preference, questionsByCategory), interview_key: createUserAnswer._id, }
             return res.status(200).json({ success: true, message: "Login Successful", data: data })
 
         } else {
@@ -117,10 +142,18 @@ const loginUser = async (req: Request, res: Response) => {
 
         }
     } catch (err: any) {
+        console.log('inside error', err.message);
         return res.status(500).json({ success: false, message: "Internal Server Error", error: err.message })
     }
 }
 
+/**
+ * This function is used for transcribing, evaluating and saving the answer recordings of the user
+ * Transcribing is done using whisper api of OpenAI
+ * Evaluating the answer to calculate answer summary is done using Azure OpenAI
+ * If there is an error in evaluating the answer, we store a document in error collection and run a cron job every night to re-evaluate the answers
+ * @param req { question_id, interview_key, audio file}
+ */
 const saveAnswerRecordings = async (req: any, res: Response) => {
     const { question_id, interview_key } = req.body
     try {
@@ -191,11 +224,16 @@ const saveAnswerRecordings = async (req: any, res: Response) => {
     }
 }
 
+/**
+ * This function is called when user skips a question. It does following-
+ * 1. Add question_id to skipped_questions_id, total questions skipped count, and is_skipped to a question in UserAnswers Collection
+ * 2. Update UserHistory collection with all_categories_accessed.is_skipped: true to mark that the category has questions that was skipped
+ * @param req { question_id, interview-key }
+ */
 const skipQuestion = async (req: Request, res: Response) => {
     try {
         const { question_id, interview_key } = req.body
         const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key) })
-        console.log(userAnswer)
         if (!userAnswer) {
             return res.json({ success: false, message: "Invalid Interview Key or question not found" })
         }
@@ -225,6 +263,10 @@ const skipQuestion = async (req: Request, res: Response) => {
     }
 }
 
+/**
+ * This is called when a user skips the entire category. This happens if the user closes the bot in the middle of answering a question
+ * @param req { interview_key }
+ */
 const skipAllQuestions = async (req: Request, res: Response) => {
     try {
         const { interview_key } = req.body
@@ -263,65 +305,6 @@ const skipAllQuestions = async (req: Request, res: Response) => {
     }
 }
 
-const endInterview = async (req: Request, res: Response) => {
-    try {
-        // TODO
-    } catch (err: any) {
-        console.log(err.message)
-        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
-    }
-}
-
-const saveMultipleChoiceAnswer = async (req: Request, res: Response) => {
-    try {
-        const { question_id, interview_key, answer } = req.body
-        const answerObj = {
-            question_id: question_id,
-            is_skipped: false,
-            answer_audio_link: null,
-            answer_transcript: answer,
-            summary: '',
-            keywords: [],
-            answered_at: new Date()
-        }
-        const userAnswer = await UserAnswers.findOne({ _id: new ObjectId(interview_key), "details.question_id": question_id })
-        if (userAnswer) {
-            const updateAnswer = await UserAnswers.updateOne({ _id: new ObjectId(interview_key), "details.question_id": question_id }, {
-                $set: {
-                    "details.$.answer_transcript": answer,
-                    "details.$.answered_at": new Date(),
-                },
-                $pull: {
-                    skip_questions_ids: question_id
-                }
-            })
-            if (updateAnswer.modifiedCount === 0) {
-                return res.json({ success: false, message: "Error Saving Answer" })
-            }
-        } else {
-            const updateAnswer = await UserAnswers.updateOne({ _id: new ObjectId(interview_key) }, {
-                $push: {
-                    details: answerObj
-                },
-                $inc: {
-                    total_questions_answered: 1
-                },
-                $pull: {
-                    skip_questions_ids: question_id
-                }
-            })
-            if (updateAnswer.modifiedCount === 0) {
-                return res.json({ success: false, message: "Error Saving Answer" })
-            }
-        }
-
-        return res.json({ success: true, message: "Answer Saved Successfully" })
-    } catch (err: any) {
-        console.log(err.message)
-        return res.json({ success: false, message: "Internal Server Error Occurred", error: err.message })
-    }
-}
-
 const getUserTranscript = async (req: Request, res: Response) => {
     try {
         const { smash_user_id, interview_key } = req.body
@@ -354,4 +337,4 @@ const getUserTranscript = async (req: Request, res: Response) => {
     }
 }
 
-export default { loginUser, saveAnswerRecordings, skipQuestion, saveMultipleChoiceAnswer, skipAllQuestions, getUserTranscript }
+export default { loginUser, saveAnswerRecordings, skipQuestion, skipAllQuestions, getUserTranscript, checkUserBotPreferenceAndEndStatus }
