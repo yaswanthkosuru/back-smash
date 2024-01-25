@@ -13,6 +13,6 @@
         "outDir": "dist",
         "rootDir": "src"
     },
-    "include": ["src/**/*.ts", "global.d.ts", "test/**/*.ts"],
+    "include": ["src/**/*.ts", "global.d.ts", "src/test/**/*.ts"],
     "exclude": ["node_modules"]
 }

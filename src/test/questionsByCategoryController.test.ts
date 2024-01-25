@@ -1,10 +1,10 @@
 // questionsByCategoryController.test.js
 const request = require('supertest');
 import { Response } from 'express';
-import questionsByCategoryController from '../src/controllers/questionByCategoryController';
-import QuestionsByCategory from '../src/models/QuestionsByCategory';
+import questionsByCategoryController from '../controllers/questionByCategoryController';
+import QuestionsByCategory from '../models/QuestionsByCategory';
 
-jest.mock('../src/models/QuestionsByCategory');
+jest.mock('../models/QuestionsByCategory');
 
 describe('createQuestionsByCategory', () => {
   it('should create questions by category successfully', async () => {

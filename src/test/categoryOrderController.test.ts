@@ -1,10 +1,10 @@
 const request = require('supertest');
-import categoryOrderController from "../src/controllers/categoryOrderController";
+import categoryOrderController from "../controllers/categoryOrderController";
 import { ObjectId } from 'mongodb';
-import CategoryOrder from "../src/models/CategoryOrder";
+import CategoryOrder from "../models/CategoryOrder";
 import { Response } from 'express';
 
-jest.mock('../src/models/CategoryOrder');
+jest.mock('../models/CategoryOrder');
 
 describe('createCategoryOrder', () => {
   it('should create category order successfully', async () => {

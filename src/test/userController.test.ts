@@ -1,11 +1,11 @@
 import { Request, Response } from 'express';
-import userController from '../src/controllers/userController';
-import User from '../src/models/User';
-import UserHistory from '../src/models/UserHistory';
-import CategoryOrder from '../src/models/CategoryOrder';
-import UserAnswers from '../src/models/UserAnswers';
-import QuestionsByCategory from '../src/models/QuestionsByCategory';
-import * as loginLogic from "../src/utils/loginLogic";
+import userController from '../controllers/userController';
+import User from '../models/User';
+import UserHistory from '../models/UserHistory';
+import CategoryOrder from '../models/CategoryOrder';
+import UserAnswers from '../models/UserAnswers';
+import QuestionsByCategory from '../models/QuestionsByCategory';
+import * as loginLogic from "../utils/loginLogic";
 import { ObjectId } from 'mongodb';
 
 jest.mock('openai', () => {
@@ -47,23 +47,23 @@ jest.mock('@azure/storage-blob', () => {
 });
 
 // Mocking the dependencies (e.g., User and UserHistory models)
-jest.mock('../src/models/User', () => ({
+jest.mock('../models/User', () => ({
   findOne: jest.fn(),
   findOneAndUpdate: jest.fn(),
   updateOne: jest.fn(),
 }));
 
-jest.mock('../src/models/UserHistory', () => ({
+jest.mock('../models/UserHistory', () => ({
   findOne: jest.fn(),
   findOneAndUpdate: jest.fn(),
   updateOne: jest.fn(),
 }));
 
-jest.mock('../src/models/CategoryOrder', () => ({
+jest.mock('../models/CategoryOrder', () => ({
   find: jest.fn(),
 }))
 
-jest.mock('../src/models/QuestionsByCategory', () => ({
+jest.mock('../models/QuestionsByCategory', () => ({
     findOne: jest.fn().mockResolvedValueOnce({
       questions: [{ question_id: '659d6618847671d66ed5e99d' }],
       // Add a toJSON method to the mock
@@ -73,15 +73,15 @@ jest.mock('../src/models/QuestionsByCategory', () => ({
     } as any), // Add type assertion here
 }))
 
-jest.mock('../src/models/UserAnswers', () => ({
+jest.mock('../models/UserAnswers', () => ({
   findOneAndUpdate: jest.fn(),
 }))
 
-jest.mock('../src/utils/utils', () => ({
+jest.mock('../utils/utils', () => ({
   getDataAccordingToPreference: jest.fn().mockReturnValueOnce({}),
 }));
 
-jest.mock('../src/utils/loginLogic', () => ({
+jest.mock('../utils/loginLogic', () => ({
   getSkippedCategoryData: jest.fn().mockReturnValueOnce({}),
   getNextCategory: jest.fn().mockReturnValueOnce({}),
 }))
